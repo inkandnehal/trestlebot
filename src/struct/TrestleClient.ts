@@ -1,4 +1,5 @@
-import { Client, GatewayIntentBits, Collection, REST, Routes } from "discord.js";
+import { Client, GatewayIntentBits, Collection, REST, Routes, Guild } from "discord.js";
+import { ChannelBridgeService } from "../database/ChannelBridgeService";
 import { Command } from "./Command";
 
 import path from "node:path";
@@ -7,11 +8,14 @@ import { pathToFileURL } from "node:url";
 
 export class TrestleClient extends Client {
     public commands = new Collection<string, Command>();
+    public channelBridgeService = new ChannelBridgeService();
 
     constructor() {
         super({
             intents: [
-                GatewayIntentBits.MessageContent
+                GatewayIntentBits.MessageContent,
+                GatewayIntentBits.Guilds,
+                GatewayIntentBits.GuildMessages
             ],
 
             allowedMentions: {
@@ -45,6 +49,41 @@ export class TrestleClient extends Client {
             } catch (error) {
                 console.error(`Error executing ${interaction.commandName}`);
                 console.error(error);
+            }
+        });
+
+        this.on("messageCreate", async message => {
+            console.log("Message created", message.content);
+            const bridge = await this.channelBridgeService.getChannelBridge(message.channelId, message.guildId!);
+            if (!bridge) return;
+
+            const targetChannelId = message.channelId === bridge.channelAId ? bridge.channelBId : bridge.channelAId;
+            const targetGuildId = message.guildId === bridge.guildAId ? bridge.guildBId : bridge.guildAId;
+
+            const targetGuild = this.guilds.cache.get(targetGuildId);
+            if (!targetGuild) {
+                console.error(`Target guild ${targetGuildId} not found for channel bridge ${bridge.id}`);
+                return;
+            }
+
+            const targetChannel = targetGuild.channels.cache.get(targetChannelId);
+
+            if (!targetChannel || !targetChannel.isTextBased()) {
+                console.error(`Target channel ${targetChannelId} not found or is not text-based for channel bridge ${bridge.id}`);
+                return;
+            }
+
+            if (message.author.id === this.user!.id) {
+                return;
+            }
+
+            try {
+                await targetChannel.send({
+                    content: `**${message.author.tag}**: ${message.content}`,
+                    files: message.attachments.map(att => att.url)
+                });
+            } catch (error) {
+                console.error(`Failed to send message through channel bridge ${bridge.id}`);
             }
         });
     }
@@ -95,19 +134,19 @@ export class TrestleClient extends Client {
             this.commands.set(name, command);
         });
 
-        const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN!);
+        // const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN!);
 
-        try {
-            console.log("Started refreshing application (/) commands.");
-            await rest.put(
-                Routes.applicationCommands(this.user!.id),
-                { body: commands.map(cmd => cmd.data) }
-            );
+        // try {
+        //     console.log("Started refreshing application (/) commands.");
+        //     await rest.put(
+        //         Routes.applicationCommands(this.user!.id),
+        //         { body: commands.map(cmd => cmd.data) }
+        //     );
 
-            console.log("Successfully reloaded application (/) commands.");
-        } catch (error) {
-            console.error(error);
-        }
+        //     console.log("Successfully reloaded application (/) commands.");
+        // } catch (error) {
+        //     console.error(error);
+        // }
 
         console.info(`Loaded ${this.commands.size} commands!`);
     }
