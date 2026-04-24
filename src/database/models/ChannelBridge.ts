@@ -26,8 +26,8 @@ const ChannelBridgeSchema = new Schema<IChannelBridge>(
     guildAId: { type: String, required: true },
     channelAId: { type: String, required: true, unique: true },
 
-    guildBId: { type: String, required: true },
-    channelBId: { type: String, required: true, unique: true },
+    guildBId: { type: String, defualt: null },
+    channelBId: { type: String, unique: true, default: null },
 
     status: {
       type: String,
