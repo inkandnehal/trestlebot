@@ -1,21 +1,32 @@
-import mongoose from "mongoose";
+import Database from "better-sqlite3";
+import fs from "fs";
 
-const URI = process.env.MONGODB_URI;
+export const db = new Database("bot.db");
 
-export async function establishDatabase() {
-    mongoose.connection.once("connected", () => {
-        console.info("INFO | Database connected!");
-    });
+const ChannelBridge = fs.readFileSync(
+    "./src/database/models/ChannelBridge.sql", 
+    "utf-8"
+);
 
-    if (!URI) {
-        throw new Error("'MONGODB_URL' was missing in the .env");
-    }
+db.exec(ChannelBridge);
+// import mongoose from "mongoose";
 
-    try {
-        await mongoose.connect(URI);
-    } catch {
-        console.error("INFO | Issue connecting to database...");
-    }
-}
+// const URI = process.env.MONGODB_URI;
 
-establishDatabase();
+// export async function establishDatabase() {
+//     mongoose.connection.once("connected", () => {
+//         console.info("INFO | Database connected!");
+//     });
+
+//     if (!URI) {
+//         throw new Error("'MONGODB_URL' was missing in the .env");
+//     }
+
+//     try {
+//         await mongoose.connect(URI);
+//     } catch {
+//         console.error("INFO | Issue connecting to database...");
+//     }
+// }
+
+// establishDatabase();

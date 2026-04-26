@@ -48,11 +48,11 @@ export default class BridgeCommand extends Command {
 
             const channel = i.options.getChannel("channel", true);
 
-            const bridge = await this.client.channelBridgeService.createBridge({
-                guildAId: i.guildId,
-                channelAId: channel.id,
-                createdBy: i.user.id,
-            } as Parameters<typeof this.client.channelBridgeService.createBridge>[0]);
+            const bridge = this.client.channelBridgeService.createBridge(
+                i.guildId,
+                channel.id,
+                i.user.id,
+            );
 
             i.reply({
                 content: `Bridge created! Connection key:\n\`${bridge.connectionKey}\``,
@@ -69,7 +69,7 @@ export default class BridgeCommand extends Command {
             const key = i.options.getString("key", true);
 
             try {
-                await this.client.channelBridgeService.connectBridge(key, i.guildId, channel.id);
+                this.client.channelBridgeService.connectBridge(key, i.guildId, channel.id);
                 i.reply({
                     content: "Channel successfully connected to bridge!",
                     flags: "Ephemeral"
