@@ -1,10 +1,11 @@
-import { Client, GatewayIntentBits, Collection, REST, Routes, Guild } from "discord.js";
+import { Client, GatewayIntentBits, Collection } from "discord.js";
 import { ChannelBridgeService } from "../database/ChannelBridgeService";
 import { Command } from "./Command";
 
 import path from "node:path";
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
+import { Listener } from "./Listener";
 
 export class TrestleClient extends Client {
     public commands = new Collection<string, Command>();
@@ -23,69 +24,28 @@ export class TrestleClient extends Client {
             }
         });
 
-        this.once("clientReady", readiedClient => {
-            console.info("Bot Connection Established!");
-            
-            const username = readiedClient.user!.username;
-            const id = readiedClient.user.id;
+        this.loadListeners();
+    }
 
-            console.info(`${username} (${id}) is now active :)`);
-            this.loadCommands();
-        });
+    async loadListeners() {
+        const filesPath = path.join(process.cwd(), "src", "listeners");
+        const files = fs.readdirSync(filesPath)
+            .filter((f) => f.endsWith(".ts") || f.endsWith(".ts"));
+        
+        for (const filePath of files) {
+            const fileURL = pathToFileURL(path.join(filesPath, filePath)).href;
+            const imported = await import(fileURL);
 
-        this.on("interactionCreate", async interaction => {
-            if (!interaction.isChatInputCommand()) return;
-            const command = this.commands.get(interaction.commandName);
-
-            if (!command) {
-                console.error(`No command matching ${interaction.commandName} was found.`);
-                return;
-            }
-            
-            try {
-                command.interaction = interaction;
-                command.client = this;
-                await command.exec();
-            } catch (error) {
-                console.error(`Error executing ${interaction.commandName}`);
-                console.error(error);
-            }
-        });
-
-        this.on("messageCreate", async message => {
-            console.log("Message created", message.content);
-            const bridge = await this.channelBridgeService.getChannelBridge(message.channelId, message.guildId!);
-            if (!bridge) return;
-
-            const targetChannelId = message.channelId === bridge.channelAId ? bridge.channelBId : bridge.channelAId;
-            const targetGuildId = message.guildId === bridge.guildAId ? bridge.guildBId : bridge.guildAId;
-
-            const targetGuild = this.guilds.cache.get(targetGuildId);
-            if (!targetGuild) {
-                console.error(`Target guild ${targetGuildId} not found for channel bridge ${bridge.id}`);
-                return;
+            const ListenerClass = imported.default;
+            if (!ListenerClass) {
+                console.warn("No default export found in ${filePath}");
+                continue;
             }
 
-            const targetChannel = targetGuild.channels.cache.get(targetChannelId);
-
-            if (!targetChannel || !targetChannel.isTextBased()) {
-                console.error(`Target channel ${targetChannelId} not found or is not text-based for channel bridge ${bridge.id}`);
-                return;
-            }
-
-            if (message.author.id === this.user!.id) {
-                return;
-            }
-
-            try {
-                await targetChannel.send({
-                    content: `**${message.author.tag}**: ${message.content}`,
-                    files: message.attachments.map(att => att.url)
-                });
-            } catch (error) {
-                console.error(`Failed to send message through channel bridge ${bridge.id}`);
-            }
-        });
+            const listener: Listener = new ListenerClass();
+            listener.client = this;
+            this[listener.once ? "once" : "on"](listener.name, (...args) => listener.exec(...args));
+        }
     }
 
     async getCommands() {
@@ -103,7 +63,6 @@ export class TrestleClient extends Client {
                 const filePath = path.join(commandsPath, file);
                 
                 const fileUrl = pathToFileURL(filePath).href;
-                console.log("File URL is this", fileUrl);
                 const imported = await import(fileUrl);
 
                 const CommandClass = imported.default;
